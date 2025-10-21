@@ -29,7 +29,7 @@ def get_supabase_client():
             raise
     return _supabase_client
 
-@app.route('/courses_suggestions', methods=['GET'])
+@app.route('/api/courses_suggestions', methods=['GET'])
 def list_suggestions():
     try:
         supabase = get_supabase_client()
@@ -48,7 +48,7 @@ def list_suggestions():
         logging.error(f"Error in list_suggestions: {e}")
         return jsonify({'error': 'Internal Server Error'}), 500
 
-@app.route('/courses_suggestions', methods=['POST'])
+@app.route('/api/courses_suggestions', methods=['POST'])
 def create_suggestion():
     try:
         supabase = get_supabase_client()
@@ -94,7 +94,7 @@ def create_suggestion():
 
 
 # مسار للموافقة على اقتراح
-@app.route('/courses_suggestions/<int:suggestion_id>/approve', methods=['POST'])
+@app.route('/api/courses_suggestions/<int:suggestion_id>/approve', methods=['POST'])
 def approve_suggestion(suggestion_id):
     try:
         supabase = get_supabase_client()
@@ -114,7 +114,7 @@ def approve_suggestion(suggestion_id):
         return jsonify({'error': 'Internal Server Error'}), 500
 
 # مسار لرفض اقتراح
-@app.route('/courses_suggestions/<int:suggestion_id>/reject', methods=['POST'])
+@app.route('/api/courses_suggestions/<int:suggestion_id>/reject', methods=['POST'])
 def reject_suggestion(suggestion_id):
     try:
         supabase = get_supabase_client()
@@ -134,7 +134,7 @@ def reject_suggestion(suggestion_id):
         return jsonify({'error': 'Internal Server Error'}), 500
 
 
-@app.route('/courses_suggestions/<int:suggestion_id>/vote', methods=['POST'])
+@app.route('/api/courses_suggestions/<int:suggestion_id>/vote', methods=['POST'])
 def vote_suggestion(suggestion_id):
     try:
         supabase = get_supabase_client()
