@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from datetime import datetime
 import os
+
 # استيراد الوحدة لطباعة الأخطاء
 import logging
 
@@ -33,16 +34,22 @@ def get_supabase_client():
 def list_suggestions():
     try:
         supabase = get_supabase_client()
-        status_filter = request.args.get('status', None)  # يمكن أن يكون pending, approved, rejected
+        # ✅ التعديل: القيمة الافتراضية هي 'approved' بدلاً من None
+        status_filter = request.args.get('status', 'approved')
+
         logging.info(f"Received GET request for suggestions. Status filter: {status_filter}")
 
         query = supabase.table('courses_suggestions').select('*')
-        if status_filter:
+
+        # ✅ إذا كان status_filter = 'all' نعرض الكل (للأدمن)
+        if status_filter and status_filter != 'all':
             query = query.eq('status', status_filter)
-        
+
         result = query.order('created_at', desc=True).execute()
+
         logging.info(f"Successfully fetched {len(result.data)} suggestions from DB.")
         return jsonify(result.data)
+
     except Exception as e:
         # طباعة خطأ في دالة جلب الاقتراحات
         logging.error(f"Error in list_suggestions: {e}")
@@ -53,11 +60,11 @@ def create_suggestion():
     try:
         supabase = get_supabase_client()
         data = request.get_json()
-        
+
         if not data:
             logging.warning("POST request failed: No JSON data received.")
             return jsonify({'error': 'Missing JSON data'}), 400
-        
+
         name = data.get('name')
         proposer_username = data.get('proposer_username', 'anonymous')
         description = data.get('description')
@@ -77,7 +84,7 @@ def create_suggestion():
             'created_at': datetime.utcnow().isoformat(),
             'updated_at': datetime.utcnow().isoformat()
         }).execute()
-        
+
         if response.data:
             logging.info(f"Suggestion created successfully with ID: {response.data[0].get('id')}")
             # قد يعيد Supabase البيانات التي تم إدخالها مع الـ ID
@@ -92,7 +99,6 @@ def create_suggestion():
         logging.error(f"Error in create_suggestion: {e}")
         return jsonify({'error': 'Internal Server Error'}), 500
 
-
 # مسار للموافقة على اقتراح
 @app.route('/api/courses_suggestions/<int:suggestion_id>/approve', methods=['POST'])
 def approve_suggestion(suggestion_id):
@@ -105,9 +111,10 @@ def approve_suggestion(suggestion_id):
             'status': 'approved',
             'updated_at': datetime.utcnow().isoformat()
         }).eq('id', suggestion_id).execute()
-        
+
         logging.info(f"Suggestion ID {suggestion_id} approved successfully.")
         return jsonify({'id': suggestion_id, 'status': 'approved'})
+
     except Exception as e:
         # طباعة خطأ في دالة الموافقة
         logging.error(f"Error in approve_suggestion for ID {suggestion_id}: {e}")
@@ -125,21 +132,21 @@ def reject_suggestion(suggestion_id):
             'status': 'rejected',
             'updated_at': datetime.utcnow().isoformat()
         }).eq('id', suggestion_id).execute()
-        
+
         logging.info(f"Suggestion ID {suggestion_id} rejected successfully.")
         return jsonify({'id': suggestion_id, 'status': 'rejected'})
+
     except Exception as e:
         # طباعة خطأ في دالة الرفض
         logging.error(f"Error in reject_suggestion for ID {suggestion_id}: {e}")
         return jsonify({'error': 'Internal Server Error'}), 500
-
 
 @app.route('/api/courses_suggestions/<int:suggestion_id>/vote', methods=['POST'])
 def vote_suggestion(suggestion_id):
     try:
         supabase = get_supabase_client()
         data = request.get_json()
-        
+
         if not data:
             logging.warning(f"Vote request for ID {suggestion_id} failed: No JSON data received.")
             return jsonify({'error': 'Missing JSON data'}), 400
@@ -149,29 +156,36 @@ def vote_suggestion(suggestion_id):
 
         # تحقق إذا صوت المستخدم مسبقًا
         existing_vote = supabase.table('votes').select('id').eq('suggestion_id', suggestion_id).eq('voter_username', voter_username).execute()
+
         if existing_vote.data:
             logging.warning(f"Voter {voter_username} already voted for suggestion ID {suggestion_id}.")
             return jsonify({'error': 'Already voted'}), 400
 
-        # تسجيل التصويت
+        # ✅ تسجيل التصويت - تم إزالة created_at لأنه يُضاف تلقائياً
         supabase.table('votes').insert({
             'suggestion_id': suggestion_id,
-            'voter_username': voter_username,
-            'created_at': datetime.utcnow().isoformat()
+            'voter_username': voter_username
+            # voted_at سيُضاف تلقائياً بـ DEFAULT NOW()
         }).execute()
+
         logging.info(f"Vote recorded for suggestion ID {suggestion_id}.")
 
         # زيادة عدد الأصوات في الجدول الرئيسي
         suggestion = supabase.table('courses_suggestions').select('votes').eq('id', suggestion_id).execute()
+
         if not suggestion.data:
             logging.warning(f"Suggestion ID {suggestion_id} not found during vote count update.")
             return jsonify({'error': 'Suggestion not found'}), 404
 
         new_votes = suggestion.data[0]['votes'] + 1
-        supabase.table('courses_suggestions').update({'votes': new_votes, 'updated_at': datetime.utcnow().isoformat()}).eq('id', suggestion_id).execute()
-        
+        supabase.table('courses_suggestions').update({
+            'votes': new_votes, 
+            'updated_at': datetime.utcnow().isoformat()
+        }).eq('id', suggestion_id).execute()
+
         logging.info(f"Suggestion ID {suggestion_id} vote count updated to {new_votes}.")
         return jsonify({'votes': new_votes})
+
     except Exception as e:
         # طباعة خطأ عام في دالة التصويت
         logging.error(f"Error in vote_suggestion for ID {suggestion_id}: {e}")
